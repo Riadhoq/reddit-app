@@ -23,6 +23,7 @@ const main = async () => {
   const RedisStore = connectRedis(session);
   const redisClient = redis.createClient();
 
+  //using cors to set cors globally
   app.use(
     cors({
       origin: "http://localhost:3000",
@@ -54,6 +55,7 @@ const main = async () => {
     context: ({ req, res }) => ({ em: orm.em, req, res }),
   });
 
+  //by default apollo sets cors to '*'
   apolloServer.applyMiddleware({ app, cors: false });
 
   // app.get("/", (_, res) => {
