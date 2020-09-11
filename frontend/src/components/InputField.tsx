@@ -7,5 +7,5 @@ type InputFieldProps {
 
 export const InputField: React.FC<InputFieldProps> = ({}) => {
     const [] = useField();
-        return ();
+        return (<div>Hello</div>);
 }
