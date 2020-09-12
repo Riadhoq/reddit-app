@@ -14,7 +14,6 @@ import connectRedis from "connect-redis";
 import cors from "cors";
 
 const main = async () => {
-  // console.log("dirname", __dirname);
   const orm = await MikroORM.init(mikroConfig);
   await orm.getMigrator().up();
 
