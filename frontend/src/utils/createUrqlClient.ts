@@ -8,13 +8,17 @@ import {
 import { pipe, tap } from "wonka";
 import Router from "next/router";
 import {
+  DeletePostMutationVariables,
   LoginMutation,
   LogoutMutation,
   MeDocument,
   MeQuery,
   RegisterMutation,
+  VoteMutationVariables,
 } from "../generated/graphql";
 import { typedUpdateQuery } from "./typedUpdateQuery";
+import gql from "graphql-tag";
+import { isServer } from "./isServer";
 
 const errorExchange: Exchange = ({ forward }) => (ops$) => {
   return pipe(
@@ -31,96 +35,144 @@ const errorExchange: Exchange = ({ forward }) => (ops$) => {
   );
 };
 
-export const createUrqlClient = (ssrExchange: any) => ({
-  url: "http://localhost:4000/graphql",
-  fetchOptions: {
-    credentials: "include" as const,
-  },
-  exchanges: [
-    dedupExchange,
-    cacheExchange({
-      keys: {
-        PaginatedPosts: () => null,
-      },
-      resolvers: {
-        Query: {
-          // the name below is important, it's the fieldname in the cursorPagination function
-          posts: cursorPagination(),
+export const createUrqlClient = (ssrExchange: any, ctx: any) => {
+  let cookie = "";
+  if (isServer()) {
+    cookie = ctx?.req?.headers?.cookie;
+  }
+  return {
+    url: "http://localhost:4000/graphql",
+    fetchOptions: {
+      credentials: "include" as const,
+      headers: cookie
+        ? {
+            cookie,
+          }
+        : undefined,
+    },
+    exchanges: [
+      dedupExchange,
+      cacheExchange({
+        keys: {
+          PaginatedPosts: () => null,
         },
-      },
-      updates: {
-        Mutation: {
-          createPost: (_result, args, cache, info) => {
-            // cache.invalidate("Query", "posts", {
-            //   limit: 10,
-            // });
-            const allFields = cache.inspectFields("Query");
-            console.log("allFIelds: ", allFields);
-
-            const fieldInfos = allFields.filter(
-              (info) => info.fieldName === "posts"
-            );
-            fieldInfos.forEach((fi) => {
-              cache.invalidate("Query", "posts", fi.arguments || {});
-            });
-          },
-          login: (_result, args, cache, info) => {
-            typedUpdateQuery<LoginMutation, MeQuery>(
-              cache,
-              { query: MeDocument },
-              _result,
-              (result, query) => {
-                if (result.login.errors) {
-                  return query;
-                } else {
-                  return {
-                    me: result.login.user,
-                  };
-                }
-              }
-            );
-          },
-          register: (_result, args, cache, info) => {
-            typedUpdateQuery<RegisterMutation, MeQuery>(
-              cache,
-              { query: MeDocument },
-              _result,
-              (result, query) => {
-                if (result.register.errors) {
-                  return query;
-                } else {
-                  return {
-                    me: result.register.user,
-                  };
-                }
-              }
-            );
-          },
-          logout: (_result, args, cache, info) => {
-            typedUpdateQuery<LogoutMutation, MeQuery>(
-              cache,
-              { query: MeDocument },
-              _result,
-              () => {
-                return { me: null };
-              }
-            );
+        resolvers: {
+          Query: {
+            // the name below is important, it's the fieldname in the cursorPagination function
+            posts: cursorPagination(),
           },
         },
-      },
-    }),
-    errorExchange,
-    ssrExchange,
-    fetchExchange,
-  ],
-});
+        updates: {
+          Mutation: {
+            deletePost: (_result, args, cache, info) => {
+              cache.invalidate({
+                __typename: "Post",
+                id: (args as DeletePostMutationVariables).id,
+              });
+            },
+            vote: (_result, args, cache, info) => {
+              const { postId, value } = args as VoteMutationVariables;
+              const data = cache.readFragment(
+                gql`
+                  fragment _ on Post {
+                    id
+                    points
+                    voteStatus
+                  }
+                `,
+                { id: postId } as any
+              );
 
+              console.log("data: ", data);
+
+              if (data) {
+                if (data.voteStatus === args.value) {
+                  return;
+                }
+                const newPoints =
+                  (data.points as number) + (!data.voteStatus ? 1 : 2) * value;
+                cache.writeFragment(
+                  gql`
+                    fragment __ on Post {
+                      points
+                      voteStatus
+                    }
+                  `,
+                  { id: postId, points: newPoints, voteStatus: value } as any
+                );
+              }
+            },
+            createPost: (_result, args, cache, info) => {
+              // cache.invalidate("Query", "posts", {
+              //   limit: 10,
+              // });
+              const allFields = cache.inspectFields("Query");
+              //console.log("allFIelds: ", allFields);
+
+              const fieldInfos = allFields.filter(
+                (info) => info.fieldName === "posts"
+              );
+              fieldInfos.forEach((fi) => {
+                cache.invalidate("Query", "posts", fi.arguments || {});
+              });
+            },
+            login: (_result, args, cache, info) => {
+              typedUpdateQuery<LoginMutation, MeQuery>(
+                cache,
+                { query: MeDocument },
+                _result,
+                (result, query) => {
+                  if (result.login.errors) {
+                    return query;
+                  } else {
+                    return {
+                      me: result.login.user,
+                    };
+                  }
+                }
+              );
+            },
+            register: (_result, args, cache, info) => {
+              typedUpdateQuery<RegisterMutation, MeQuery>(
+                cache,
+                { query: MeDocument },
+                _result,
+                (result, query) => {
+                  if (result.register.errors) {
+                    return query;
+                  } else {
+                    return {
+                      me: result.register.user,
+                    };
+                  }
+                }
+              );
+            },
+            logout: (_result, args, cache, info) => {
+              typedUpdateQuery<LogoutMutation, MeQuery>(
+                cache,
+                { query: MeDocument },
+                _result,
+                () => {
+                  return { me: null };
+                }
+              );
+            },
+          },
+        },
+      }),
+      errorExchange,
+      ssrExchange,
+      fetchExchange,
+    ],
+  };
+};
 export const cursorPagination = (): Resolver => {
   return (_parent, fieldArgs, cache, info) => {
     const { parentKey: entityKey, fieldName } = info;
-    console.log(entityKey, fieldName);
+    //console.log(entityKey, fieldName);
     const allFields = cache.inspectFields(entityKey);
-    console.log(allFields);
+    //console.log(allFields);
 
     const fieldInfos = allFields.filter((info) => info.fieldName === fieldName);
     const size = fieldInfos.length;
@@ -128,13 +180,13 @@ export const cursorPagination = (): Resolver => {
       return undefined;
     }
 
-    console.log("fieldArgs: ", fieldArgs);
+    //console.log("fieldArgs: ", fieldArgs);
     const fieldKey = `${fieldName}(${stringifyVariables(fieldArgs)})`;
     const isInTheCache = cache.resolve(
       cache.resolveFieldByKey(entityKey, fieldKey) as string,
       "posts"
     );
-    console.log("fieldKey:", fieldKey);
+    //console.log("fieldKey:", fieldKey);
 
     info.partial = !isInTheCache;
     let hasMore = true;
@@ -151,7 +203,7 @@ export const cursorPagination = (): Resolver => {
       results.push(...data);
     });
 
-    console.log(results);
+    //console.log(results);
 
     return { __typename: "PaginatedPosts", hasMore, posts: results };
 

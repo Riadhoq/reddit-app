@@ -16,7 +16,13 @@ export const UpvoteSection: React.FC<UpvoteSectionProps> = ({
   return (
     <Flex direction="column" justifyContent="center" alignItems="center" mr={4}>
       <IconButton
+        variantColor={postSnippet.voteStatus === 1 ? "green" : undefined}
         onClick={async () => {
+          console.log(postSnippet);
+
+          if (postSnippet.voteStatus === 1) {
+            return;
+          }
           setLoadingState("upvote-loading");
           await vote({
             postId: postSnippet.id,
@@ -30,7 +36,11 @@ export const UpvoteSection: React.FC<UpvoteSectionProps> = ({
       />
       <Text>{postSnippet.points}</Text>
       <IconButton
+        variantColor={postSnippet.voteStatus === -1 ? "red" : undefined}
         onClick={async () => {
+          if (postSnippet.voteStatus === -1) {
+            return;
+          }
           setLoadingState("upvote-loading");
           await vote({
             postId: postSnippet.id,
