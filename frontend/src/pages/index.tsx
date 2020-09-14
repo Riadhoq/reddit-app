@@ -20,6 +20,7 @@ import {
 import { createUrqlClient } from "../utils/createUrqlClient";
 import { useState } from "react";
 import { UpvoteSection } from "../components/UpvoteSection";
+import { EditDeletePostButtons } from "../components/EditDeletePostButtons";
 
 const Index = () => {
   const [variables, setVariables] = useState({
@@ -58,27 +59,7 @@ const Index = () => {
                     <Text flex={1} mt={4}>
                       {p.textSnippet}
                     </Text>
-                    {meData?.me?.id === p.creator.id ? (
-                      <Box>
-                        <NextLink
-                          href="/post/edit/[id]"
-                          as={`/post/edit/${p.id}`}
-                        >
-                          <IconButton
-                            mr={2}
-                            aria-label="edit post"
-                            icon="edit"
-                          />
-                        </NextLink>
-                        <IconButton
-                          aria-label="delete post"
-                          icon="delete"
-                          onClick={() => {
-                            deletePost({ id: p.id });
-                          }}
-                        />
-                      </Box>
-                    ) : null}
+                    <EditDeletePostButtons id={p.id} creatorId={p.creator.id} />
                   </Flex>
                 </Box>
               </Flex>
