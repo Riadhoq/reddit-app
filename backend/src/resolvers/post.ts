@@ -1,5 +1,4 @@
-import { isAuth } from "../middleware/isAuth";
-import { MyContext } from "../types";
+import { Upvote } from "../entities/Upvote";
 import {
   Arg,
   Ctx,
@@ -14,8 +13,10 @@ import {
   Root,
   UseMiddleware,
 } from "type-graphql";
-import { Post } from "../entities/Post";
 import { getConnection } from "typeorm";
+import { Post } from "../entities/Post";
+import { isAuth } from "../middleware/isAuth";
+import { MyContext } from "../types";
 
 @InputType()
 class PostInput {
@@ -39,6 +40,56 @@ export class PostResolver {
   @FieldResolver(() => String)
   textSnippet(@Root() root: Post) {
     return root.text.slice(0, 50);
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(isAuth)
+  async vote(
+    @Arg("postId", () => Int) postId: number,
+    @Arg("value", () => Int) value: number,
+    @Ctx() { req }: MyContext
+  ) {
+    const isUpvote = value !== -1;
+    const realValue = isUpvote ? 1 : -1;
+    const { userId } = req.session;
+
+    const upvote = await Upvote.findOne({ where: { postId, userId } });
+    if (upvote && upvote.value !== realValue) {
+      await getConnection().transaction(async (transactionManager) => {
+        await transactionManager.query(
+          `update upvote 
+          set value = $1
+          where "postId"=$2 and "userId"=$3`,
+          [2 * realValue, postId, userId]
+        );
+
+        await transactionManager.query(
+          `
+        update post
+        set points = points + $1
+        where id = $2;
+        `,
+          [realValue, postId]
+        );
+      });
+    } else if (!upvote) {
+      // never voted before
+      await getConnection().transaction(async (transactionManager) => {
+        await transactionManager.query(
+          `insert into upvote ("userId","postId", value)
+        values ($1,$2,$3)`,
+          [userId, postId, realValue]
+        );
+        await transactionManager.query(
+          `    update post
+        set points = points + $1
+        where id = $2`,
+          [realValue, postId]
+        );
+      });
+    }
+
+    return true;
   }
 
   // Query is for fetching data
@@ -66,7 +117,7 @@ export class PostResolver {
         'updatedAt',u."updatedAt") creator 
       from post p 
       inner join public.user as u on u.id = p."creatorId"
-      ${cursor ? `where p."createdAT" < $2` : ""} order by p."createdAt" DESC
+      ${cursor ? `where p."createdAt" < $2` : ""} order by p."createdAt" DESC
       limit $1
     `,
       replacements
