@@ -42,6 +42,11 @@ export class PostResolver {
     return root.text.slice(0, 50);
   }
 
+  @FieldResolver(() => String)
+  creator(@Root() post: Post, @Ctx() { userLoader }: MyContext) {
+    return userLoader.load(post.creatorId);
+  }
+
   @Mutation(() => Boolean)
   @UseMiddleware(isAuth)
   async vote(
@@ -110,19 +115,12 @@ export class PostResolver {
     const posts = await getConnection().query(
       `
       select p.*, 
-      json_build_object(
-        'id', u.id,
-        'email',u.email, 
-        'username', u.username,
-        'createdAt',u."createdAt",
-        'updatedAt',u."updatedAt") creator,
         ${
           req.session.userId
             ? '(select value from upvote where "userId" = $2 and "postId" = p.id) "voteStatus"'
             : '$2 as "voteStatus"'
         }
-      from post p 
-      inner join public.user as u on u.id = p."creatorId"
+      from post p
       ${cursor ? `where p."createdAt" < $3` : ""} order by p."createdAt" DESC
       limit $1
     `,
@@ -144,7 +142,7 @@ export class PostResolver {
 
     // const posts = await queryBuilder.getMany();
 
-    console.log(posts);
+    //console.log(posts);
 
     return {
       posts: posts.slice(0, realLimit),
@@ -159,7 +157,7 @@ export class PostResolver {
     //"id" controlls the post query argument
     @Arg("id", () => Int) id: number
   ): Promise<Post | undefined> {
-    return Post.findOne(id, { relations: ["creator"] });
+    return Post.findOne(id);
   }
 
   //Mutation to add /update /delete
