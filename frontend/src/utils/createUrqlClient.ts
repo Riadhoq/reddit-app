@@ -1,4 +1,4 @@
-import { cacheExchange, Resolver } from "@urql/exchange-graphcache";
+import { Cache, cacheExchange, Resolver } from "@urql/exchange-graphcache";
 import {
   dedupExchange,
   Exchange,
@@ -33,6 +33,19 @@ const errorExchange: Exchange = ({ forward }) => (ops$) => {
       }
     })
   );
+};
+
+const invalidateAllPosts = (cache: Cache) => {
+  // cache.invalidate("Query", "posts", {
+  //   limit: 10,
+  // });
+  const allFields = cache.inspectFields("Query");
+  //console.log("allFIelds: ", allFields);
+
+  const fieldInfos = allFields.filter((info) => info.fieldName === "posts");
+  fieldInfos.forEach((fi) => {
+    cache.invalidate("Query", "posts", fi.arguments || {});
+  });
 };
 
 export const createUrqlClient = (ssrExchange: any, ctx: any) => {
@@ -103,18 +116,7 @@ export const createUrqlClient = (ssrExchange: any, ctx: any) => {
               }
             },
             createPost: (_result, args, cache, info) => {
-              // cache.invalidate("Query", "posts", {
-              //   limit: 10,
-              // });
-              const allFields = cache.inspectFields("Query");
-              //console.log("allFIelds: ", allFields);
-
-              const fieldInfos = allFields.filter(
-                (info) => info.fieldName === "posts"
-              );
-              fieldInfos.forEach((fi) => {
-                cache.invalidate("Query", "posts", fi.arguments || {});
-              });
+              invalidateAllPosts(cache);
             },
             login: (_result, args, cache, info) => {
               typedUpdateQuery<LoginMutation, MeQuery>(
@@ -131,6 +133,7 @@ export const createUrqlClient = (ssrExchange: any, ctx: any) => {
                   }
                 }
               );
+              invalidateAllPosts(cache);
             },
             register: (_result, args, cache, info) => {
               typedUpdateQuery<RegisterMutation, MeQuery>(
