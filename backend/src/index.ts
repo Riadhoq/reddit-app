@@ -16,6 +16,7 @@ import { UserResolver } from "./resolvers/user";
 import path from "path";
 import { Upvote } from "./entities/Upvote";
 import { createUserLoader } from "./utils/createUserLoader";
+import { createUpvoteLoader } from "./utils/createUpvoteLoader";
 
 const main = async () => {
   const typeOrmConnection = await createConnection({
@@ -72,6 +73,7 @@ const main = async () => {
       res,
       redis,
       userLoader: createUserLoader(),
+      upvoteLoader: createUpvoteLoader(),
     }),
   });
 

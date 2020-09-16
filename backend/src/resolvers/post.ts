@@ -43,8 +43,25 @@ export class PostResolver {
   }
 
   @FieldResolver(() => String)
+  //field name should match for this to work
   creator(@Root() post: Post, @Ctx() { userLoader }: MyContext) {
     return userLoader.load(post.creatorId);
+  }
+
+  @FieldResolver(() => Int, { nullable: true })
+  //field name should match for this to work
+  async voteStatus(
+    @Root() post: Post,
+    @Ctx() { req, upvoteLoader }: MyContext
+  ) {
+    if (!req.session.userId) {
+      return null;
+    }
+    const upvote = await upvoteLoader.load({
+      postId: post.id,
+      userId: req.session.userId,
+    });
+    return upvote ? upvote.value : null;
   }
 
   @Mutation(() => Boolean)
